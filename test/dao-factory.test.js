@@ -1134,6 +1134,46 @@ describe(Support.getTestDialectTeaser("DAOFactory"), function () {
           })
     })
 
+    it('should not include deleted paranoid records via a nested join', function() {
+        var User = this.sequelize.define('User', {
+          username: Sequelize.STRING
+        })
+        var Pet = this.sequelize.define('Pet', {
+          name: Sequelize.STRING,
+          UserId: Sequelize.INTEGER
+        })
+        var Toy = this.sequelize.define('Toy', {
+          name: Sequelize.STRING,
+          PetId: Sequelize.INTEGER
+        }, { paranoid: true })
+
+        User.hasMany(Pet)
+        Pet.hasMany(Toy)
+
+        return User.sync({ force: true })
+          .then(function() { return Pet.sync({ force: true }) })
+          .then(function() { return Toy.sync({ force: true }) })
+          .then(function() { return User.create({ username: 'Joe' }) })
+          .then(function(user) {
+            return Pet.create({ name: 'Fido', UserId: user.id })
+          })
+          .then(function (pet) {
+            return Toy.bulkCreate([
+              { name: 'squeaky toy', PetId: pet.id },
+              { name: 'old rope', PetId: pet.id }
+            ])
+          })
+          .then(function () { return Toy.destroy({ id: 1 }) })
+          .then(function () {
+            return User.find({include: {model: Pet, include: Toy}})
+          })
+          .then(function (user) {
+            expect(user).to.exist
+            expect(user.Pets).to.have.length(1)
+            expect(user.Pets[0].Toys).to.have.length(1)
+          })
+    })
+
     it('should delete a paranoid record if I set force to true', function(done) {
       var self = this
       var User = this.sequelize.define('paranoiduser', {
